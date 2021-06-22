@@ -1,141 +1,138 @@
-from aiohttp import web
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import exc
-
 import json
 import datetime
 
+from aiohttp import web
+from aiohttp.web import View
+
+from sqlalchemy import exc
+from marshmallow.exceptions import ValidationError
+
+from connect_db import DatabaseTransaction
 from models import UsersClass, RulesClass
 from logger_app import LoggingMain
+from serelizator import UserSchema
 
 logger = LoggingMain().get_logging('Test_task')
 
-engine = create_engine('postgresql+psycopg2://admin:admin@localhost/test_db', echo=False)
-Session = sessionmaker(bind=engine)
-session = Session()
 
+class UserView(View):
 
-class UserView:
-
-    def __init__(self):
-        self.is_verified = False
-        self.root = False
-
-    async def authorization(self, request):
+    def get_connect_db(self):
         """
-        Функция авторизации.
+        Осуществляется подключение к бд
         """
-        login = request.match_info.get('name', False)
-        password = request.match_info.get('password', False)
-        if login and password:
-            query = session.query(UsersClass, RulesClass).filter_by(login=login).first()
-            if query:
-                if query[0].password == password:
-                    self.is_verified = True
-                    admin_flag = query[1]
-                    if bool(admin_flag):
-                        self.root = True
-                    return web.Response(text=json.dumps('Authorized'), status=200)
+        try:
+            return DatabaseTransaction('test.db')
+        except:
+            return False
 
-        self.is_verified = False
-        logger.warning("Введены неправильные данные для авторизации")
-        return web.Response(text=json.dumps('Forbidden'), status=403)
+    async def validate_data(self, data):
+        """
+        Данная функция проверяет входные данные
+        """
+        try:
+            input_data = UserSchema.load(data)
+        except ValidationError:
+            return False
+        return input_data
 
-    async def post(self, request):
+    async def get(self) -> web.Response:
+        """
+        Данная функция возвращает пользователей
+        """
+        connect_db = self.get_connect_db()
+        with connect_db as db_connect:
+            with db_connect as cursor:
+                query = cursor.query(UsersClass).all()
+                return web.Response(text=f"{query}")
+
+    async def post(self) -> web.Response:
         """
         Данная функция добавляет нового пользователя.
         """
-        if not self.is_verified and not self.root:
-            return web.Response(text='Forbidden')
+        # request = await get_response(self.request)
+        input_data = self.request.query
+        # input_data = self.validate_data(request)
+        connect_db = self.get_connect_db()
 
-        name = request.match_info.get('name', False)
-        last_name = request.match_info.get('last_name', False)
-        login = request.match_info.get('login', False)
-        password = request.match_info.get('password', False)
-        date = request.match_info.get('date', False)
-        admin_flag = bool(request.match_info.get('admin_flag', False))
+        if input_data:
+            birthday = datetime.datetime.strptime(input_data.get('birthday'), '%Y-%m-%d')
 
-        birthday = datetime.datetime.strptime(date, '%Y-%m-%d')
+            try:
+                users = UsersClass(name=input_data.get('name'),
+                                   last_name=input_data.get('last_name'),
+                                   login=input_data.get('login'),
+                                   password=input_data.get('password'),
+                                   birthday=birthday)
 
-        try:
-            users = UsersClass(name=name,
-                               last_name=last_name,
-                               login=login,
-                               password=password,
-                               birthday=birthday)
-            session.add(users)
-            session.flush()
+                with connect_db as db_connect:
+                    with db_connect as session:
+                        session.add(users)
+                        session.flush()
 
-            query = session.query(UsersClass).filter_by(login=login).first()
+                        query = session.query(UsersClass).filter_by(login=input_data.get('login')).first()
+                        admin_flag = input_data.get('admin_flag')
+                        rules = RulesClass(block=False,
+                                           admin=admin_flag,
+                                           only_read=False if admin_flag is True else True,
+                                           user_id=query.id)
 
-            rules = RulesClass(block=False, admin=admin_flag, only_read=False if admin_flag is True else True, user_id=query.id)
+                        session.add(rules)
+                        session.commit()
 
-            session.add(rules)
-            session.commit()
-        except exc.IntegrityError:
-            logger.error("Повторения зачения")
-            return web.Response(text='Forbidden')
+            except exc.IntegrityError as e:
+                logger.error(f"{e}")
+                raise web.HTTPForbidden()
 
-        except exc.PendingRollbackError:
-            logger.error("Нарушено уникальность значений")
-            return web.Response(text='Forbidden')
+            except exc.PendingRollbackError as e:
+                logger.error(f"{e}")
+                raise web.HTTPForbidden()
 
-        return web.Response(text='Успешно создан')
+            return web.Response(text='Пользователь успешно создан')
 
-    async def delete(self, request):
+    async def delete(self) -> web.Response:
         """
         Данная функция удаляет пользователя из бд по логину.
         """
-        login = request.match_info.get('login', False)
-        if login and self.is_verified and self.root:
-            query = session.query(UsersClass, RulesClass).filter_by(login=login).first()
-            if query is not None:
-                session.delete(query[1])
-                session.delete(query[0])
+        # input_data = self.validate_data(request)
+        input_data = self.request.query
+        connect_db = self.get_connect_db()
 
-                session.commit()
-                return web.Response(text='Пользователь успешно удален')
+        if input_data:
+            with connect_db as db_connect:
+                with db_connect as session:
+                    query = session.query(UsersClass, RulesClass).filter_by(login=input_data.get('login')).first()
+                    if query is not None:
+                        session.delete(query[1])
+                        session.delete(query[0])
 
-        return web.Response(text='Forbidden')
+                        session.commit()
+                        return web.Response(text='Пользователь успешно удален')
 
-    async def update(self, request):
+        raise web.HTTPForbidden()
+
+    async def update(self) -> web.Response:
         """
         Данная функция обновляет имя и фамилию пользователя
         """
-        login = request.match_info.get('login', False)
-        name = request.match_info.get('name', False)
-        last_name = request.match_info.get('last_name', False)
+        # input_data = self.validate_data(request)
+        input_data = self.request.query
 
-        if name and self.is_verified and self.root:
-            query = session.query(UsersClass).filter(UsersClass.login == login).one()
-            query.name = name
-            query.last_name = last_name
+        connect_db = self.get_connect_db()
 
-            session.commit()
-            return web.Response(text='Пользователь успешно обновлен')
-        return web.Response(text='Forbidden')
+        if input_data:
+            with connect_db as db_connect:
+                with db_connect as session:
+                    query = session.query(UsersClass).filter(UsersClass.login == input_data.get('login')).one()
+                    query.name = input_data.get('name')
+                    query.last_name = input_data.get('last_name')
 
-    async def get_user(self, request):
-        """
-        Возвращает пользователя по login
-        """
-        login = request.match_info.get('login', False)
-        if login:
-            query = session.query(UsersClass).filter_by(login=login).first()
-            return web.Response(text=f"{query}")
-
-        return web.Response(text='Forbidden')
+                    return web.Response(text='Пользователь успешно обновлен')
+        raise web.HTTPForbidden()
 
 
-classUser = UserView()
 app = web.Application()
-
-app.add_routes([web.post('/{name}&{password}', classUser.authorization),
-                web.put('/{name}&{last_name}&{login}&{password}&{date}&{admin_flag}', classUser.post),
-                web.delete('/{login}', classUser.delete),
-                web.patch('/{login}&{name}&{last_name}', classUser.update),
-                web.get('/{login}', classUser.get_user)])
+app.router.add_view('/users', UserView)
 
 if __name__ == '__main__':
-    web.run_app(app)
+    web.run_app(app, port=8080)

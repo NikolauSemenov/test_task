@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
-engine = create_engine('postgresql+psycopg2://admin:admin@localhost/test_db', echo=False)
+engine = create_engine('sqlite:///test.db', echo=False)
 Session = sessionmaker(bind=engine)
 session = Session()
 
