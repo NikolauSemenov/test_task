@@ -1,8 +1,11 @@
 import json
 import datetime
+from typing import Dict
 
 from aiohttp import web
 from aiohttp.web import View
+from marshmallow import Schema
+from multidict import MultiDictProxy
 
 from sqlalchemy import exc
 from marshmallow.exceptions import ValidationError
@@ -26,15 +29,16 @@ class UserView(View):
         except:
             return False
 
-    async def validate_data(self, data):
+    # TODO: Если хотел использовать отдельную функцию для валидации схем, то нужно было сделать как то так
+    # noinspection PyMethodMayBeStatic
+    def load_data(self, data: MultiDictProxy, schema: Schema) -> dict:
         """
         Данная функция проверяет входные данные
         """
         try:
-            input_data = UserSchema.load(data)
+            return schema.load(data)
         except ValidationError:
-            return False
-        return input_data
+            raise web.HTTPUnprocessableEntity()
 
     async def get(self) -> web.Response:
         """
@@ -51,44 +55,46 @@ class UserView(View):
         Данная функция добавляет нового пользователя.
         """
         # request = await get_response(self.request)
-        input_data = self.request.query
-        # input_data = self.validate_data(request)
+
+        input_data = self.load_data(self.request.query, UserSchema())
+
         connect_db = self.get_connect_db()
 
-        if input_data:
-            birthday = datetime.datetime.strptime(input_data.get('birthday'), '%Y-%m-%d')
+        try:
+            users = UsersClass(
+                name=input_data['name'],
+                last_name=input_data['last_name'],
+                login=input_data['login'],
+                password=input_data['password'],
+                birthday=input_data["birthday"]
+            )
 
-            try:
-                users = UsersClass(name=input_data.get('name'),
-                                   last_name=input_data.get('last_name'),
-                                   login=input_data.get('login'),
-                                   password=input_data.get('password'),
-                                   birthday=birthday)
+            with connect_db as db_connect:
+                with db_connect as session:
+                    session.add(users)
+                    session.flush()
 
-                with connect_db as db_connect:
-                    with db_connect as session:
-                        session.add(users)
-                        session.flush()
+                    query = session.query(UsersClass).filter_by(login=input_data['login']).first()
+                    admin_flag = input_data.get('admin_flag')
+                    rules = RulesClass(
+                        block=False,
+                        admin=admin_flag,
+                        only_read=False if admin_flag is True else True,
+                        user_id=query.id
+                    )
 
-                        query = session.query(UsersClass).filter_by(login=input_data.get('login')).first()
-                        admin_flag = input_data.get('admin_flag')
-                        rules = RulesClass(block=False,
-                                           admin=admin_flag,
-                                           only_read=False if admin_flag is True else True,
-                                           user_id=query.id)
+                    session.add(rules)
+                    session.commit()
 
-                        session.add(rules)
-                        session.commit()
+        except exc.IntegrityError as e:
+            logger.error(f"{e}")
+            raise web.HTTPForbidden()
 
-            except exc.IntegrityError as e:
-                logger.error(f"{e}")
-                raise web.HTTPForbidden()
+        except exc.PendingRollbackError as e:
+            logger.error(f"{e}")
+            raise web.HTTPForbidden()
 
-            except exc.PendingRollbackError as e:
-                logger.error(f"{e}")
-                raise web.HTTPForbidden()
-
-            return web.Response(text='Пользователь успешно создан')
+        return web.Response(text='Пользователь успешно создан')
 
     async def delete(self) -> web.Response:
         """
