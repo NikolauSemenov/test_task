@@ -3,7 +3,7 @@ from aiohttp.web import View
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import get_users, save_users, load_data, delete_user, update_user
+from requests_db import get_users, save_users, load_data, delete_user, update_user
 from serelizator import UserSchema, DeleteSchema, UpdateSchema
 
 
@@ -52,23 +52,19 @@ class UserView(View):
         return web.HTTPOk()
 
 
-def setup(app: web.Application) -> None:
-    app.cleanup_ctx.append(connect_db)
-
-
 async def connect_db(app: web.Application):
     engine = create_engine('sqlite:///test.db', echo=False)
     Session = sessionmaker(bind=engine)
     session_db = Session()
     app["session_db"] = session_db
     yield
-    await session_db.close()
+    session_db.close()
 
 
 def make_app():
     app = web.Application()
     app.router.add_view('/users', UserView)
-    setup(app)
+    app.cleanup_ctx.append(connect_db)
     return app
 
 
