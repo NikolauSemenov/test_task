@@ -7,26 +7,43 @@ class UserSchema(Schema):
     id = fields.UUID(dump_only=True)
 
     name = fields.Str(
-        error_messages={'invalid': 'Поле name должно быть строкой'}
+        required=True
     )
 
     last_name = fields.Str(
-        error_messages={'invalid': 'Поле last_name должно быть строкой'}
+        required=True
     )
 
     password = fields.Str(
-        error_messages={'invalid': 'Поле password должно быть строкой'}
+        required=True
     )
 
-    birthday = fields.Str(
-        error_messages={'invalid': 'Поле birthday должно быть строкой'}
+    birthday = fields.Date(
+        required=True
     )
 
     login = fields.Str(
-        required=True,
-        error_messages={'invalid': 'Поле login должно быть строкой'}
+        required=True
     )
-    admin_flag = fields.Bool()
+    admin_flag = fields.Bool(missing=False, default=False)
+
+    class Meta:
+        unknown = EXCLUDE
+
+
+class UpdateSchema(Schema):
+
+    login = fields.Str(required=True)
+    name = fields.Str(required=True)
+    last_name = fields.Str(required=True)
+
+    class Meta:
+        unknown = EXCLUDE
+
+
+class DeleteSchema(Schema):
+
+    login = fields.Str(required=True)
 
     class Meta:
         unknown = EXCLUDE

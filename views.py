@@ -1,178 +1,75 @@
-import datetime
-import time
-import base64
-
-from cryptography import fernet
-from aiohttp import web
+from aiohttp import web, ClientSession
 from aiohttp.web import View
-from marshmallow import Schema
-from multidict import MultiDictProxy
-from sqlalchemy import exc
-from aiohttp_session import get_session, setup
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from marshmallow.exceptions import ValidationError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from connect_db import DatabaseTransaction
-from models import UsersClass, RulesClass
-from logger_app import LoggingMain
-from serelizator import UserSchema
-
-logger = LoggingMain().get_logging('Test_task')
+from models import get_users, save_users, load_data, delete_user, update_user
+from serelizator import UserSchema, DeleteSchema, UpdateSchema
 
 
 class UserView(View):
-
-    @staticmethod
-    async def startup_1(app):
-        print(1)
-
-    @staticmethod
-    async def cleanup_ctx_2(app):
-        print('init 2')
-        yield
-        print('cleanup 2')
-
-    @staticmethod
-    async def startup_3(app):
-        print('init 3')
-
-    def get_connect_db(self):
-        """
-        Осуществляется подключение к бд
-        """
-        try:
-            return DatabaseTransaction('test.db')
-        except:
-            return False
-
-    # TODO: Если хотел использовать отдельную функцию для валидации схем, то нужно было сделать как то так
-    # noinspection PyMethodMayBeStatic
-    def load_data(self, data: MultiDictProxy, schema: Schema) -> dict:
-        """
-        Данная функция проверяет входные данные
-        """
-        # try:
-        return schema.load(data)
-        # except ValidationError as e:
-        #     logger.error(f"{e}")
-        #     raise web.HTTPUnprocessableEntity()
 
     async def get(self) -> web.Response:
         """
         Данная функция возвращает пользователей
         """
-
-        connect_db = self.get_connect_db()
-        with connect_db as db_connect:
-            with db_connect as cursor:
-                query = cursor.query(UsersClass).all()
-                return web.Response(body=f"{query}")
+        # async with ClientSession() as session:
+        #     async with session.get(self.request.url, get_users())
+        return web.Response(body=f"{get_users()}")
 
     async def post(self) -> web.Response:
         """
         Данная функция добавляет нового пользователя.
         """
 
-        input_data = self.load_data(self.request.query, UserSchema())
-        connect_db = self.get_connect_db()
+        # async with ClientSession() as session:
+        #     async with session.post(self.request.url, json=await self.request.json()) as response:
+        #         return response
 
-        try:
-            birthday = datetime.datetime.strptime(input_data['birthday'], '%Y-%m-%d')
-            users = UsersClass(
-                name=input_data['name'],
-                last_name=input_data['last_name'],
-                login=input_data['login'],
-                password=input_data['password'],
-                birthday=birthday
-            )
-
-            with connect_db as db_connect:
-                with db_connect as session:
-                    session.add(users)
-                    session.flush()
-
-                    query = session.query(UsersClass).filter_by(login=input_data['login']).first()
-                    admin_flag = input_data['admin_flag']
-                    rules = RulesClass(
-                        block=False,
-                        admin=admin_flag,
-                        only_read=False if admin_flag is True else True,
-                        user_id=query.id
-                    )
-
-                    session.add(rules)
-                    session.commit()
-
-        except exc.IntegrityError as e:
-            logger.error(f"{e}")
-            raise web.HTTPForbidden()
-
-        except exc.PendingRollbackError as e:
-            logger.error(f"{e}")
-            raise web.HTTPForbidden()
-
-        except KeyError as e:
-            logger.error(f"{e}")
-            raise web.HTTPForbidden()
-
-        return web.Response(body='Пользователь успешно создан')
+        input_data = load_data(await self.request.json(), UserSchema())
+        session_db = self.request.config_dict["session_db"]
+        save_users(session_db, input_data)
+        return web.HTTPCreated()
 
     async def delete(self) -> web.Response:
         """
         Данная функция удаляет пользователя из бд по логину.
         """
-        input_data = self.load_data(self.request.query, UserSchema())
-        connect_db = self.get_connect_db()
-
-        if input_data:
-            with connect_db as db_connect:
-                with db_connect as session:
-                    query = session.query(UsersClass, RulesClass).filter_by(login=input_data['login']).first()
-                    if query is not None:
-                        session.delete(query[1])
-                        session.delete(query[0])
-
-                        session.commit()
-                        return web.Response(body='Пользователь успешно удален')
-
-        raise web.HTTPForbidden()
+        input_data = load_data(await self.request.json(), DeleteSchema())
+        db = self.request.config_dict["session_db"]
+        if delete_user(db, input_data):
+            return web.HTTPOk()
+        return web.HTTPBadRequest()
 
     async def update(self) -> web.Response:
         """
         Данная функция обновляет имя и фамилию пользователя
         """
-        input_data = self.load_data(self.request.query, UserSchema())
-        connect_db = self.get_connect_db()
+        input_data = load_data(await self.request.json(), UpdateSchema())
+        db = self.request.config_dict["session_db"]
+        update_user(db, input_data)
+        return web.HTTPOk()
 
-        try:
-            if input_data:
-                with connect_db as db_connect:
-                    with db_connect as session:
-                        query = session.query(UsersClass).filter(UsersClass.login == input_data['login']).one()
-                        query.name = input_data['name']
-                        query.last_name = input_data['last_name']
 
-                        return web.Response(body='Пользователь успешно обновлен')
+def setup(app: web.Application) -> None:
+    app.cleanup_ctx.append(connect_db)
 
-        except KeyError as e:
-            logger.error(f"{e}")
-            raise web.HTTPForbidden()
+
+async def connect_db(app: web.Application):
+    engine = create_engine('sqlite:///test.db', echo=False)
+    Session = sessionmaker(bind=engine)
+    session_db = Session()
+    app["session_db"] = session_db
+    yield
+    await session_db.close()
 
 
 def make_app():
     app = web.Application()
-
-    # app.on_startup.append(UserView.startup_1)
-    # app.cleanup_ctx.append(UserView.cleanup_ctx_2)
-    # app.on_startup.append(UserView.startup_3)
-
-    fernet_key = fernet.Fernet.generate_key()
-    secret_key = base64.urlsafe_b64decode(fernet_key)
-    setup(app, EncryptedCookieStorage(secret_key))
-
     app.router.add_view('/users', UserView)
+    setup(app)
     return app
 
 
 if __name__ == '__main__':
-    web.run_app(make_app(), port=7070)
+    web.run_app(make_app(), port=8080)
