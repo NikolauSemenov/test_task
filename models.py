@@ -1,8 +1,6 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Boolean, exc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from multidict import MultiDictProxy
 from aiohttp import web
 from marshmallow.exceptions import ValidationError
@@ -11,10 +9,6 @@ from marshmallow import Schema
 from logger_app import LoggingMain
 
 Base = declarative_base()
-engine = create_engine('sqlite:///test.db', echo=False)
-Session = sessionmaker(bind=engine)
-session = Session()
-
 logger = LoggingMain().get_logging('Test_task')
 
 
@@ -77,11 +71,12 @@ def load_data(data: MultiDictProxy, schema: Schema) -> dict:
         raise web.HTTPUnprocessableEntity(text=str(e.messages))
 
 
-def get_users():
-    return session.query(UsersClass).all()
+def get_users(session_db):
+    with session_db as session:
+        return session.query(UsersClass).all()
 
 
-def save_users(session_db: Session, data: MultiDictProxy) -> None:
+def save_users(session_db, data: MultiDictProxy) -> None:
     with session_db as session:
         with session.begin():
             try:
@@ -120,7 +115,7 @@ def save_users(session_db: Session, data: MultiDictProxy) -> None:
                 session.commit()
 
 
-def delete_user(session_db: Session, data: MultiDictProxy) -> Boolean:
+def delete_user(session_db, data: MultiDictProxy) -> Boolean:
     with session_db as session:
         with session.begin():
             try:
@@ -136,7 +131,7 @@ def delete_user(session_db: Session, data: MultiDictProxy) -> Boolean:
                 return True
 
 
-def update_user(session_db: Session, data: MultiDictProxy) -> None:
+def update_user(session_db, data: MultiDictProxy) -> None:
     with session_db as session:
         with session.begin():
             try:

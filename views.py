@@ -15,7 +15,8 @@ class UserView(View):
         """
         # async with ClientSession() as session:
         #     async with session.get(self.request.url, get_users())
-        return web.Response(body=f"{get_users()}")
+        session_db = self.request.config_dict["session_db"]
+        return web.Response(body=f"{get_users(session_db)}")
 
     async def post(self) -> web.Response:
         """
