@@ -74,8 +74,8 @@ def delete_user(session_db: Session, data: dict) -> Optional[bool]:
                     session.delete(query[0])
                     session.delete(query[1])
             except:
+                # TODO указать явные исключения
                 session.rollback()
-                return False
             else:
                 session.commit()
                 return True
@@ -89,6 +89,7 @@ def update_user(session_db: Session, data: dict) -> None:
                 query.name = data['name']
                 query.last_name = data['last_name']
             except:
+                # TODO указать явные исключения
                 session.rollback()
                 raise web.HTTPError()
             else:
