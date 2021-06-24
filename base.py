@@ -3,11 +3,10 @@ from marshmallow import Schema
 from marshmallow.exceptions import ValidationError
 from multidict import MultiDictProxy
 from sqlalchemy.orm import Session
+
 import requests_db
 import serelizator
-from logger_app import LoggingMain
-
-logger = LoggingMain().get_logging('Test_task')
+from requests_db import logger
 
 
 class BaseView(web.View):

@@ -11,14 +11,14 @@ class UserView(BaseView):
         """
         Данная функция возвращает пользователей
         """
-        return web.Response(body=f"{self.db.get_users(self.session)}")
+        return web.Response(body=f"{await self.db.get_users(self.session)}")
 
     async def post(self) -> web.Response:
         """
         Данная функция добавляет нового пользователя.
         """
         input_data = self.load(await self.request.json(), self.schemas.UserSchema())
-        self.db.save_users(self.session, input_data)
+        await self.db.save_users(self.session, input_data)
         return web.HTTPCreated()
 
     async def delete(self) -> web.Response:
@@ -26,29 +26,29 @@ class UserView(BaseView):
         Данная функция удаляет пользователя из бд по логину.
         """
         input_data = self.load(await self.request.json(), self.schemas.DeleteSchema())
-        if self.db.delete_user(self.session, input_data):
-            return web.HTTPOk()
+        if await self.db.delete_user(self.session, input_data):
+            return web.HTTPNoContent()
         return web.HTTPBadRequest()
 
-    async def update(self) -> web.Response:
+    async def put(self) -> web.Response:
         """
         Данная функция обновляет имя и фамилию пользователя
         """
         input_data = self.load(await self.request.json(), self.schemas.UpdateSchema())
-        self.db.update_user(self.session, input_data)
+        await self.db.update_user(self.session, input_data)
         return web.HTTPOk()
 
 
 async def connect_db(app: web.Application):
     engine = create_engine('sqlite:///test.db', echo=False)
-    Session = sessionmaker(bind=engine)
-    session_db = Session()
+    session = sessionmaker(bind=engine)
+    session_db = session()
     app["session_db"] = session_db
     yield
     session_db.close()
 
 
-def make_app():
+def make_app() -> web.Application:
     app = web.Application()
     app.router.add_view('/users', UserView)
     app.cleanup_ctx.append(connect_db)

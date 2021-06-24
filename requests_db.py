@@ -10,13 +10,12 @@ from models import UsersClass, RulesClass
 logger = LoggingMain().get_logging('Test_task')
 
 
-# TODO: тут то где тип возвращаемых данных?)
-def get_users(session_db: Session):
+async def get_users(session_db: Session) -> list:
     with session_db as session:
         return session.query(UsersClass).all()
 
 
-def save_users(session_db: Session, data: dict) -> None:
+async def save_users(session_db: Session, data: dict) -> None:
     with session_db as session:
         with session.begin():
             try:
@@ -57,7 +56,7 @@ def save_users(session_db: Session, data: dict) -> None:
                 session.commit()
 
 
-def delete_user(session_db: Session, data: dict) -> Optional[bool]:
+async def delete_user(session_db: Session, data: dict) -> Optional[bool]:
     with session_db as session:
         with session.begin():
             try:
@@ -66,11 +65,15 @@ def delete_user(session_db: Session, data: dict) -> Optional[bool]:
                     .filter_by(login=data['login'])
                     .first()
                 )
+                # query = (
+                #     session.query(UsersClass)
+                #     .join(RulesClass, RulesClass.user_id == UsersClass.id)
+                #     .filter(UsersClass.login == data['login'])
+                # )
                 if query is not None:
                     session.delete(query[0])
                     session.delete(query[1])
             except Exception as EXC:
-                # TODO указать явные исключения
                 logger.error(EXC)
                 session.rollback()
             else:
@@ -78,7 +81,7 @@ def delete_user(session_db: Session, data: dict) -> Optional[bool]:
                 return True
 
 
-def update_user(session_db: Session, data: dict) -> None:
+async def update_user(session_db: Session, data: dict) -> None:
     with session_db as session:
         with session.begin():
             try:
@@ -90,7 +93,6 @@ def update_user(session_db: Session, data: dict) -> None:
                 query.name = data['name']
                 query.last_name = data['last_name']
             except Exception as EXC:
-                # TODO указать явные исключения
                 logger.error(EXC)
                 session.rollback()
                 raise web.HTTPError()
