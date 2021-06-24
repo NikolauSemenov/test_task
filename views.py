@@ -1,44 +1,32 @@
-from aiohttp import web, ClientSession
-from aiohttp.web import View
+from aiohttp import web
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from requests_db import get_users, save_users, load_data, delete_user, update_user
-from serelizator import UserSchema, DeleteSchema, UpdateSchema
+from base import BaseView
 
 
-class UserView(View):
+class UserView(BaseView):
 
     async def get(self) -> web.Response:
         """
         Данная функция возвращает пользователей
         """
-        # async with ClientSession() as session:
-        #     async with session.get(self.request.url, get_users())
-        session_db = self.request.config_dict["session_db"]
-        return web.Response(body=f"{get_users(session_db)}")
+        return web.Response(body=f"{self.db.get_users(self.session)}")
 
     async def post(self) -> web.Response:
         """
         Данная функция добавляет нового пользователя.
         """
-
-        # async with ClientSession() as session:
-        #     async with session.post(self.request.url, json=await self.request.json()) as response:
-        #         return response
-
-        input_data = load_data(await self.request.json(), UserSchema())
-        session_db = self.request.config_dict["session_db"]
-        save_users(session_db, input_data)
+        input_data = self.load(await self.request.json(), self.schemas.UserSchema())
+        self.db.save_users(self.session, input_data)
         return web.HTTPCreated()
 
     async def delete(self) -> web.Response:
         """
         Данная функция удаляет пользователя из бд по логину.
         """
-        input_data = load_data(await self.request.json(), DeleteSchema())
-        db = self.request.config_dict["session_db"]
-        if delete_user(db, input_data):
+        input_data = self.load(await self.request.json(), self.schemas.DeleteSchema())
+        if self.db.delete_user(self.session, input_data):
             return web.HTTPOk()
         return web.HTTPBadRequest()
 
@@ -46,9 +34,8 @@ class UserView(View):
         """
         Данная функция обновляет имя и фамилию пользователя
         """
-        input_data = load_data(await self.request.json(), UpdateSchema())
-        db = self.request.config_dict["session_db"]
-        update_user(db, input_data)
+        input_data = self.load(await self.request.json(), self.schemas.UpdateSchema())
+        self.db.update_user(self.session, input_data)
         return web.HTTPOk()
 
 
