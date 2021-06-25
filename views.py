@@ -1,5 +1,5 @@
 from aiohttp import web
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from base import BaseView
@@ -40,8 +40,8 @@ class UserView(BaseView):
 
 
 async def connect_db(app: web.Application):
-    engine = create_engine('sqlite:///test.db', echo=False)
-    session = sessionmaker(bind=engine)
+    engine = create_async_engine('postgresql+asyncpg://postgres:12345@localhost/test', echo=False)
+    session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     session_db = session()
     app["session_db"] = session_db
     yield
@@ -56,4 +56,4 @@ def make_app() -> web.Application:
 
 
 if __name__ == '__main__':
-    web.run_app(make_app(), port=8080)
+    web.run_app(make_app(), port=2020)
