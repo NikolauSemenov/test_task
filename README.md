@@ -20,7 +20,7 @@ pip install -U pip && pip install -r requirements.txt
 ## 1. Build DB
 
 ```bash
-alembic upgdade head
+alembic upgrade head
 ```
 
 ## 2. Run
