@@ -1,31 +1,62 @@
-from aiohttp.test_utils import AioHTTPTestCase
 from aiohttp import web
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from pytest import fixture
+from sqlalchemy_utils import create_database, drop_database
 
-from requests_db import get_users
-from views import UserView, connect_db
-
-
-async def get_session():
-    engine = create_async_engine('postgresql+asyncpg://postgres:12345@localhost/test', echo=False)
-    session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    return session()
+from views import connect_db, UserView
+from config import read_config
 
 
-async def test_get_request(request, test_client, loop):
+test_data = {"name": "Nikolay",
+             "last_name": "Semenov",
+             "login": "nik",
+             "password": "12345",
+             "birthday": "1994-09-05"}
 
-    session_db = get_session()
 
-    class_user = UserView(request)
-    get_ = await class_user.get()
-    # get_ = await get_users(session_db)
+@fixture
+def migrated_postgres():
+    config = get_config()['app']
+    pg_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}"
+    create_database(url=pg_url)
+    yield
+    drop_database(pg_url)
 
-    app = web.Application(loop=loop)
-    app.router.add_route("GET", "/", get_)
+
+def get_config():
+    config = read_config()
+    return config
+
+
+def create_app() -> web.Application:
+    app = web.Application()
+    app.router.add_view('/users', UserView)
     app.cleanup_ctx.append(connect_db)
+    return app
 
-    client = await test_client(app)
 
-    resp = await client.get('/')
+@fixture
+def cli(aiohttp_client, loop):
+    app = create_app()
+    return loop.run_until_complete(aiohttp_client(app))
+
+
+async def test_get_request(cli):
+    resp = await cli.get('/users')
     assert resp.status == 200
+
+
+async def test_post_request(cli):
+    resp = await cli.post('/users', json=test_data)
+    assert resp.status == 201
+
+
+async def test_put_request(cli):
+    resp = await cli.put('/users', json={"login": test_data['login'],
+                                         "name": test_data['name'],
+                                         "last_name": test_data['last_name']})
+    assert resp.status == 200
+
+
+async def test_delete_request(cli):
+    resp = await cli.delete('/users', json={"login": test_data['login']})
+    assert resp.status == 204
