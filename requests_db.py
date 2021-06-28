@@ -26,7 +26,7 @@ async def save_users(session_db: AsyncSession, data: dict) -> None:
                                       login=data['login']
                 )
                 session.add(user_add)
-                session.flush()
+                await session.flush()
 
                 select_user = select(UsersClass.id).filter_by(login=data['login'])
                 admin_flag = data['admin_flag']
@@ -47,7 +47,7 @@ async def save_users(session_db: AsyncSession, data: dict) -> None:
                 logger.error(f"{e}")
                 raise web.HTTPBadRequest()
             else:
-                session.commit()
+                await session.commit()
 
 
 async def delete_user(session_db: AsyncSession, data: dict) -> Optional[bool]:
@@ -69,7 +69,7 @@ async def delete_user(session_db: AsyncSession, data: dict) -> Optional[bool]:
                 session.rollback()
                 raise web.HTTPBadRequest()
             else:
-                session.commit()
+                await session.commit()
                 return True
 
 
@@ -86,4 +86,4 @@ async def update_user(session_db: AsyncSession, data: dict) -> None:
                 session.rollback()
                 raise web.HTTPError()
             else:
-                session.commit()
+                await session.commit()
