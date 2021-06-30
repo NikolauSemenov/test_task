@@ -1,8 +1,15 @@
 from aiohttp import web
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+import alembic.config
 
 from base import BaseView
+from config import read_config
+
+alembicArgs = [
+    '--raiseerr',
+    'upgrade', 'head',
+]
 
 
 class UserView(BaseView):
@@ -19,6 +26,7 @@ class UserView(BaseView):
         """
         input_data = self.load(await self.request.json(), self.schemas.UserSchema())
         await self.db.save_users(self.session, input_data)
+        alembic.config.main(argv=alembicArgs)
         return web.HTTPCreated()
 
     async def delete(self) -> web.Response:
@@ -27,6 +35,7 @@ class UserView(BaseView):
         """
         input_data = self.load(await self.request.json(), self.schemas.DeleteSchema())
         if await self.db.delete_user(self.session, input_data):
+            alembic.config.main(argv=alembicArgs)
             return web.HTTPNoContent()
         return web.HTTPBadRequest()
 
@@ -36,16 +45,23 @@ class UserView(BaseView):
         """
         input_data = self.load(await self.request.json(), self.schemas.UpdateSchema())
         await self.db.update_user(self.session, input_data)
+        alembic.config.main(argv=alembicArgs)
         return web.HTTPOk()
 
 
+def get_config():
+    config = read_config()
+    return config
+
+
 async def connect_db(app: web.Application):
-    engine = create_async_engine('postgresql+asyncpg://postgres:12345@localhost/test', echo=False)
+    config = get_config()['app']
+    engine = create_async_engine(f"postgresql+asyncpg://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}", echo=False)
     session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     session_db = session()
     app["session_db"] = session_db
     yield
-    session_db.close()
+    await session_db.close()
 
 
 def make_app() -> web.Application:
@@ -56,4 +72,4 @@ def make_app() -> web.Application:
 
 
 if __name__ == '__main__':
-    web.run_app(make_app(), port=2020)
+    web.run_app(make_app())

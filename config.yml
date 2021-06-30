@@ -6,4 +6,3 @@ app:
   host: localhost
   namedb: test_db
   port: 8080
-  db: postgresql+asyncpg

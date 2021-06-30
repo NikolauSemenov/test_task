@@ -1,22 +1,24 @@
 from aiohttp import web
 from pytest import fixture
 from sqlalchemy_utils import create_database, drop_database
+from faker import Faker
 
 from views import connect_db, UserView
 from config import read_config
 
+fake = Faker()
 
-test_data = {"name": "Nikolay",
-             "last_name": "Semenov",
-             "login": "nik",
-             "password": "12345",
-             "birthday": "1994-09-05"}
+test_data = {"name": fake.first_name_male(),
+             "last_name": fake.last_name(),
+             "login": fake.suffix(),
+             "password": fake.bban(),
+             "birthday": fake.date()}
 
 
-@fixture
+@fixture(scope='session')
 def migrated_postgres():
     config = get_config()['app']
-    pg_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}"
+    pg_url = f"postgresql://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}_test"
     create_database(url=pg_url)
     yield
     drop_database(pg_url)
@@ -34,8 +36,8 @@ def create_app() -> web.Application:
     return app
 
 
-@fixture
-def cli(aiohttp_client, loop):
+@fixture()
+def cli(migrated_postgres, aiohttp_client, loop):
     app = create_app()
     return loop.run_until_complete(aiohttp_client(app))
 
