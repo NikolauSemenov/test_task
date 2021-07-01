@@ -7,3 +7,5 @@ PyYAML==5.4.1
 pytest==6.2.4
 asyncpg==0.23.0
 pytest_aiohttp==0.3.0
+aiohttp-apispec==2.2.1
+Faker==8.8.2

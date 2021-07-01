@@ -1,3 +1,4 @@
+import marshmallow.validate
 from marshmallow import Schema, fields, EXCLUDE
 
 
@@ -7,7 +8,8 @@ class UserSchema(Schema):
     id = fields.UUID(dump_only=True)
 
     name = fields.Str(
-        required=True
+        required=True,
+        validate=marshmallow.validate.Length(min=5)
     )
 
     last_name = fields.Str(
@@ -29,6 +31,10 @@ class UserSchema(Schema):
 
     class Meta:
         unknown = EXCLUDE
+
+
+class UsersList(Schema):
+    users = fields.List(fields.String(), required=True)
 
 
 class UpdateSchema(Schema):
