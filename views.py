@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from typing import Callable, Awaitable
+import async_timeout
 
 from aiohttp import web
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -143,10 +144,11 @@ async def transaction(request: web.Request, handler: Handler) -> StreamResponse:
 
 async def connect_db(app: web.Application):
     config = get_config()['app']
-    engine = create_async_engine(f"postgresql+asyncpg://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}", echo=False)
-    session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    session_db = session()
-    app["session_db"] = session_db
+    async with async_timeout.timeout(5):
+        engine = create_async_engine(f"postgresql+asyncpg://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}", echo=False)
+        session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+        session_db = session()
+        app["session_db"] = session_db
     yield
     await session_db.close()
 
