@@ -1,6 +1,6 @@
 from aiohttp import web
 
-from main.views import make_app
+from views import make_app
 
 
 if __name__ == '__main__':
