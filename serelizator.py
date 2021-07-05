@@ -34,7 +34,7 @@ class UserSchema(Schema):
 
 
 class UsersList(Schema):
-    users = fields.List(fields.String(), required=True)
+    users = fields.List(fields.Str(), required=True)
 
 
 class UpdateSchema(Schema):

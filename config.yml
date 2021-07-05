@@ -2,7 +2,6 @@ database:
   name: test.db
 app:
   user: postgres
-  password: admin
-  host: localhost
-  namedb: test_db
-  port: 8080
+  password: brownrabbit
+  host: 10.171.0.114:13001
+  namedb: test

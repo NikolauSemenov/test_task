@@ -23,4 +23,5 @@ class BaseView(web.View):
 
     @staticmethod
     def dump(data: Any, schema_: Schema):
-        return schema_.dump(data)
+        datas = schema_.dump(data)
+        return datas

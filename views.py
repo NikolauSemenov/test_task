@@ -2,6 +2,10 @@ from contextlib import asynccontextmanager
 from typing import Callable, Awaitable
 import async_timeout
 
+from sqlalchemy_utils import database_exists
+from alembic.config import Config
+from alembic import command
+from sqlalchemy_utils import create_database
 from aiohttp import web
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -101,20 +105,37 @@ class UserView(BaseView):
         return web.HTTPOk()
 
 
-def get_config():
+def get_config() -> dict:
     config = read_config()
     return config
 
 
+config_my = get_config()['app']
 Handler = Callable[[web.Request], Awaitable[StreamResponse]]
+
+
+def make_migrations() -> None:
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+
+
+def create_db(url: str) -> None:
+    create_database(url=url)
+    make_migrations()
+
+
+def check_db() -> None:
+    url = f"postgresql://{config_my['user']}:{config_my['password']}@{config_my['host']}/{config_my['namedb']}"
+    if not database_exists(url):
+        create_db(url)
 
 
 @web.middleware
 async def exceptions(request: web.Request, handler: Handler) -> StreamResponse:
     try:
         return await handler(request)
-    except web.HTTPException:
-        raise
+    except web.HTTPException as exc:
+        raise exc
     except Exception as exc:
         raise web.HTTPInternalServerError(text=f"{exc}")
 
@@ -143,12 +164,13 @@ async def transaction(request: web.Request, handler: Handler) -> StreamResponse:
 
 
 async def connect_db(app: web.Application):
-    config = get_config()['app']
     async with async_timeout.timeout(5):
-        engine = create_async_engine(f"postgresql+asyncpg://{config['user']}:{config['password']}@{config['host']}/{config['namedb']}", echo=False)
+        url = f"postgresql+asyncpg://{config_my['user']}:{config_my['password']}@{config_my['host']}/{config_my['namedb']}"
+        engine = create_async_engine(url, echo=False)
         session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
         session_db = session()
         app["session_db"] = session_db
+        check_db()
     yield
     await session_db.close()
 
