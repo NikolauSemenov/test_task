@@ -1,24 +1,19 @@
 version: '3.9'
 services:
   db:
-    image: postgres:12-alpine
-    container_name: postgres
+    image: postgres:13-alpine
     ports:
-    - 5434:5434
+    - 8081:5434
     volumes:
-    - ./pg_data:/var/lib/postgresql/data/pgdata
+      - $PWD/test-pgdata:/var/lib/postgresql/data
     environment:
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: test_db
-      PGDATA: /var/lib/postgresql/data/pgdata
-    restart: always
+      - POSTGRES_DBNAME=test_db
+      - POSTGRES_PASSWORD=admin
   app:
     build: .
     container_name: application
     ports:
     - 8080:8080
-    environment:
-      POSTGRES_HOST: db
-    restart: always
-    links:
-      - db
+    command: python /app/test/app.py
+    volumes:
+      - ./:/app/test

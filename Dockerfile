@@ -1,9 +1,10 @@
 FROM python:3.7
 
-RUN mkdir -p /usr/src/app/
-WORKDIR /usr/src/app/
-
-COPY . /usr/src/app/
+EXPOSE 8080
+ENV PYTHONPATH=/app
+WORKDIR /app/test
+COPY . /app/test
 RUN pip install  --no-cache-dir -r requirements.txt
-
-CMD ["python", "app.py"]
+RUN ls -l
+RUN pwd
+CMD ["python", "/app/test/app.py"]
