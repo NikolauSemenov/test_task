@@ -2,3 +2,5 @@ log/
 *.log
 .idea/
 *.db
+__pycache__/
+test-pgdata/
